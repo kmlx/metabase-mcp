@@ -137,12 +137,91 @@ async def list_databases() -> dict[str, Any]:
 
 @mcp.tool
 async def list_cards() -> dict[str, Any]:
-    """List all questions/cards in Metabase"""
+    """List all questions/cards in Metabase (WARNING: Large dataset - 1700+ cards, may timeout)"""
     try:
         result = await metabase_client.request("GET", "/card")
         return result
     except Exception as e:
         logger.error(f"Error listing cards: {e}")
+        raise
+
+
+@mcp.tool
+async def list_cards_paginated(limit: int = 50, offset: int = 0, filter_type: str = "all") -> dict[str, Any]:
+    """
+    List cards with pagination and filtering to avoid timeout issues
+    
+    Args:
+        limit: Maximum number of cards to return (default: 50)
+        offset: Number of cards to skip (default: 0) 
+        filter_type: Filter type - 'all', 'mine', 'bookmarked', 'archived' (default: 'all')
+    """
+    try:
+        # Build query parameters
+        params = {}
+        if filter_type != "all":
+            params["f"] = filter_type
+            
+        # Convert params to query string
+        query_string = "&".join([f"{k}={v}" for k, v in params.items()])
+        endpoint = f"/card?{query_string}" if query_string else "/card"
+        
+        result = await metabase_client.request("GET", endpoint)
+        
+        # Apply pagination manually since Metabase API doesn't support limit/offset for cards
+        if isinstance(result, list):
+            paginated_result = result[offset:offset + limit]
+            return {
+                "cards": paginated_result,
+                "pagination": {
+                    "limit": limit,
+                    "offset": offset,
+                    "returned": len(paginated_result),
+                    "total_available": len(result),
+                    "has_more": offset + limit < len(result)
+                },
+                "filter": filter_type
+            }
+        else:
+            return result
+            
+    except Exception as e:
+        logger.error(f"Error listing cards with pagination: {e}")
+        raise
+
+
+
+@mcp.tool
+async def list_cards_by_collection(collection_id: int) -> dict[str, Any]:
+    """
+    List cards in a specific collection (smaller, focused dataset)
+    
+    Args:
+        collection_id: ID of the collection to filter by
+    """
+    try:
+        # Get all cards first, then filter by collection
+        # Note: Metabase API doesn't have direct collection filtering for cards
+        result = await metabase_client.request("GET", "/card")
+        
+        if isinstance(result, list):
+            # Filter by collection_id
+            filtered_cards = [
+                card for card in result 
+                if card.get("collection_id") == collection_id
+            ]
+            
+            return {
+                "cards": filtered_cards,
+                "collection_id": collection_id,
+                "count": len(filtered_cards),
+                "message": f"Found {len(filtered_cards)} cards in collection {collection_id}"
+            }
+        else:
+            return result
+            
+    except Exception as e:
+        logger.error(f"Error listing cards by collection {collection_id}: {e}")
         raise
 
 
