@@ -9,6 +9,8 @@ execute queries, manage cards, and work with collections.
 import asyncio
 import logging
 import os
+import time
+from collections import defaultdict
 from enum import Enum
 from typing import Any
 
@@ -125,6 +127,156 @@ metabase_client = MetabaseClient()
 
 # Tool implementations
 @mcp.tool
+async def find_candidate_collections(
+    query: str,
+    limit_collections: int = 10
+) -> dict[str, Any]:
+    """
+    Find collections whose names contain the query words.
+    Simple collection name matching - fast and reliable.
+
+    Args:
+        query: Text to search for in collection names.
+        limit_collections: Max collections to return.
+    """
+    try:
+        # Get all collections
+        collections = await metabase_client.request("GET", "/collection")
+        
+        if not isinstance(collections, list):
+            return {
+                "query": query,
+                "collections": [],
+                "results": {"total_collections_searched": 0, "matched_collections": 0}
+            }
+
+        # Search collection names
+        search_term = query.strip().lower()
+        matched_collections = []
+        
+        for collection in collections:
+            if not collection:  # Skip None collections
+                continue
+                
+            collection_name = (collection.get("name") or "").lower()
+            collection_desc = (collection.get("description") or "").lower()
+            
+            # Check if query matches collection name or description
+            if (search_term in collection_name or 
+                search_term in collection_desc):
+                matched_collections.append({
+                    "collection_id": collection.get("id"),
+                    "collection_name": collection.get("name"),
+                    "description": collection.get("description"),
+                    "parent_id": collection.get("parent_id"),
+                    "archived": collection.get("archived", False)
+                })
+
+        # Sort by name and apply limit
+        matched_collections.sort(key=lambda x: x.get("collection_name", "").lower())
+        limited_collections = matched_collections[:limit_collections]
+
+        return {
+            "query": query,
+            "collections": limited_collections,
+            "results": {
+                "total_collections_searched": len(collections),
+                "matched_collections": len(matched_collections),
+                "returned_collections": len(limited_collections)
+            },
+            "note": "Collections matching query in name or description. Use search_cards_in_collections next."
+        }
+        
+    except Exception as e:
+        logger.error(f"Error finding candidate collections: {e}")
+        raise
+
+
+@mcp.tool
+async def search_cards_in_collections(
+    query: str,
+    collection_ids: list[int],
+    limit: int = 25,
+    offset: int = 0
+) -> dict[str, Any]:
+    """
+    Search for cards within specific collections by getting all cards from each collection
+    and filtering by query in card names and descriptions.
+
+    Args:
+        query: Text to search for in card names and descriptions.
+        collection_ids: List of collection IDs to search within.
+        limit: Max cards to return (page size).
+        offset: Number of matches to skip (pagination).
+    """
+    try:
+        search_term = query.strip().lower()
+        all_matches = []
+
+        # Get cards from each collection
+        for collection_id in collection_ids:
+            try:
+                # Use existing list_cards_by_collection logic
+                all_cards = await metabase_client.request("GET", "/card")
+                
+                if isinstance(all_cards, list):
+                    # Filter by collection_id
+                    collection_cards = [
+                        card for card in all_cards 
+                        if card.get("collection_id") == collection_id
+                    ]
+                    
+                    # Search within these cards
+                    for card in collection_cards:
+                        card_name = (card.get("name") or "").lower()
+                        card_description = (card.get("description") or "").lower()
+                        
+                        # Check if search term is in name or description
+                        if (search_term in card_name or 
+                            search_term in card_description):
+                            # Keep only essential fields
+                            matched_card = {
+                                "id": card.get("id"),
+                                "name": card.get("name"),
+                                "description": card.get("description"),
+                                "collection_id": card.get("collection_id"),
+                                "updated_at": card.get("updated_at"),
+                                "created_at": card.get("created_at")
+                            }
+                            all_matches.append(matched_card)
+                            
+            except Exception as e:
+                logger.warning(f"Error searching collection {collection_id}: {e}")
+                continue
+
+        # Sort by updated_at desc (most recent first)
+        all_matches.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
+        
+        total_found = len(all_matches)
+
+        # Apply pagination
+        paginated_matches = all_matches[offset:offset + limit]
+
+        return {
+            "query": query,
+            "collections_searched": collection_ids,
+            "pagination": {
+                "limit": limit,
+                "offset": offset,
+                "returned": len(paginated_matches),
+                "total_found": total_found,
+                "has_more": offset + limit < total_found,
+            },
+            "cards": paginated_matches,
+            "note": f"Searched {len(collection_ids)} collections for '{query}'. Found {total_found} matching cards."
+        }
+
+    except Exception as e:
+        logger.error(f"Error searching cards in collections: {e}")
+        raise
+
+
+@mcp.tool
 async def list_databases() -> dict[str, Any]:
     """List all databases in Metabase"""
     try:
@@ -188,8 +340,6 @@ async def list_cards_paginated(limit: int = 50, offset: int = 0, filter_type: st
     except Exception as e:
         logger.error(f"Error listing cards with pagination: {e}")
         raise
-
-
 
 @mcp.tool
 async def list_cards_by_collection(collection_id: int) -> dict[str, Any]:
