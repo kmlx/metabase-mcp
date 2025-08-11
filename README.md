@@ -9,31 +9,29 @@ A FastMCP (Model Context Protocol) server for Metabase, built with Python. This 
 - Create and manage cards (questions)
 - Work with collections
 - List tables and fields
-- Full authentication support (API Key or Session-based)
+- API Key authentication
 
 ## Installation
 
 ### Quick Start with uv (Recommended)
 
 1. **Install uv** if not already installed:
-Please refer to uv
-
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
 
 2. **Clone and setup**:
 ```bash
+git clone <repository-url>
+cd metabase-mcp
 uv sync  # Install dependencies and create virtual environment
 ```
 
 3. **Configure environment**:
 ```bash
-cp .env.example .env
-# Edit .env with your Metabase configuration
-```
-
-### Alternative Installation (pip)
-
-```bash
-pip install -r requirements.txt
+# Create .env file with your Metabase configuration
+echo "METABASE_URL=http://localhost:3000" > .env
+echo "METABASE_API_KEY=your-api-key-here" >> .env
 ```
 
 ## Configuration
@@ -41,80 +39,34 @@ pip install -r requirements.txt
 Set the following environment variables in your `.env` file:
 
 - `METABASE_URL`: Your Metabase instance URL
-- `METABASE_API_KEY`: Your Metabase API key (preferred method)
-
-OR
-
-- `METABASE_USER_EMAIL`: Your Metabase user email
-- `METABASE_PASSWORD`: Your Metabase password
+- `METABASE_API_KEY`: Your Metabase API key
 
 ## Usage
 
 ### Run the Server
 
 ```bash
-# STDIO transport (default)
-uv run python server.py
+# STDIO transport (default for MCP integration)
+uv run server.py
 
-# SSE transport (uses HOST=0.0.0.0, PORT=8000 by default)
-uv run python server.py --sse
+# SSE transport (for web applications)
+uv run server.py --sse
 
-# HTTP transport (uses HOST=0.0.0.0, PORT=8000 by default)
-uv run python server.py --http
-
-# Custom host and port via environment variables
-HOST=localhost PORT=9000 uv run python server.py --sse
-HOST=192.168.1.100 PORT=8080 uv run python server.py --http
-
-# Set environment variables persistently
-export HOST=localhost
-export PORT=9000
-uv run python server.py --sse
+# HTTP transport
+uv run server.py --http
 ```
 
-### FastMCP CLI Integration
+### Claude Desktop Integration
 
-```bash
-# Run with FastMCP CLI
-fastmcp run server.py
+To integrate with Claude Desktop, add the configuration to `~/Library/Application\ Support/Claude/claude_desktop_config.json`:
 
-# Install as Claude Desktop MCP server
-fastmcp install server.py -n "Metabase MCP"
-```
-
-### Cursor Integration
-
-For Cursor IDE integration:
-
-#### STDIO Transport (Default)
-```bash
-uv run python scripts/install-cursor.py
-```
-
-#### SSE Transport
-```bash
-# Install with SSE transport
-uv run python scripts/install-cursor.py --sse        # Uses PORT environment variable or default 8000
-
-# Or use the dedicated SSE installer
-uv run python scripts/install-cursor-sse.py          # Uses PORT environment variable or default 8000
-```
-
-**Important for SSE**: You must start the server before using Cursor:
-```bash
-# Use environment variables for host/port configuration
-HOST=0.0.0.0 PORT=8000 uv run python server.py --sse
-```
-
-### Claude Integration
-After running `uv sync`, you can find the Python executable at `/path/to/repo/.venv/bin/python`.
-To integrate with Claude, add or update the configuration file at `~/Library/Application\ Support/Claude/claude_desktop_config.json`:
 ```json
 {
     "mcpServers": {
-        "metabase-mcp-server": {
-            "command": "/path/to/repo/.venv/bin/python",
-            "args": ["/path/to/repo/server.py"]
+        "metabase-mcp": {
+            "command": "uv",
+            "args": ["run", "python", "/path/to/metabase-mcp-kmlx/server.py"],
+            "cwd": "/path/to/metabase-mcp-kmlx"
         }
     }
 }
@@ -127,7 +79,7 @@ To integrate with Claude, add or update the configuration file at `~/Library/App
 - `list_tables`: List all tables in a database with formatted output
 - `get_table_fields`: Get all fields/columns in a table
 
-### Card & Query Tools  
+### Card & Query Tools
 - `list_cards`: List all questions/cards in Metabase (WARNING: Large dataset)
 - `list_cards_paginated`: List cards with pagination to avoid timeout issues
 - `execute_card`: Execute a Metabase question/card and get results
@@ -143,21 +95,6 @@ To integrate with Claude, add or update the configuration file at `~/Library/App
 - `search_metabase`: Universal search using Metabase search API (cards, dashboards, collections)
 - `find_candidate_collections`: Find collections by name/description matching (fast)
 - `search_cards_in_collections`: Search for cards within specific collections (targeted)
-
-## Transport Methods
-
-The server supports multiple transport methods:
-
-- **STDIO** (default): For IDE integration (Cursor, Claude Desktop)
-- **SSE**: Server-Sent Events for web applications
-- **HTTP**: Standard HTTP for API access
-
-```bash
-uv run python server.py                        # STDIO (default)
-uv run python server.py --sse                  # SSE (HOST=0.0.0.0, PORT=8000)
-uv run python server.py --http                 # HTTP (HOST=0.0.0.0, PORT=8000)
-HOST=localhost PORT=9000 uv run python server.py --sse   # Custom host/port
-```
 
 ## Development
 
@@ -179,29 +116,3 @@ uv run isort .               # Import sorting
 # Type checking
 uv run mypy server.py
 ```
-
-### Validation
-
-```bash
-# Validate installation
-uv run python scripts/validate.py
-```
-
-## Examples
-
-Check out the example files for usage patterns:
-
-- `examples/examples.py` - Basic usage examples
-- `examples/quick-start.py` - Quick start guide
-- `examples/sse-example.py` - SSE transport usage example
-
-## Files Overview
-
-- `server.py` - Main FastMCP server
-- `pyproject.toml` - Modern Python project configuration
-- `scripts/install-cursor.py` - Cross-platform Cursor installation
-- `scripts/install-cursor-sse.py` - SSE-specific Cursor installation
-- `scripts/validate.py` - Installation validation
-- `examples/` - Usage examples and quick start guides
-- `tests/test_server.py` - Basic server tests
-- `config/cursor-config.json` - Example Cursor configuration 

@@ -6,12 +6,9 @@ A FastMCP server that provides tools to interact with Metabase databases,
 execute queries, manage cards, and work with collections.
 """
 
-import asyncio
 import logging
 import os
-import time
-from collections import defaultdict
-from enum import Enum
+from contextlib import asynccontextmanager
 from typing import Any
 
 import httpx
@@ -27,26 +24,23 @@ logger = logging.getLogger(__name__)
 
 # Get Metabase configuration from environment variables
 METABASE_URL = os.getenv("METABASE_URL")
-METABASE_USER_EMAIL = os.getenv("METABASE_USER_EMAIL")
-METABASE_PASSWORD = os.getenv("METABASE_PASSWORD")
 METABASE_API_KEY = os.getenv("METABASE_API_KEY")
 
-if not METABASE_URL or (
-    not METABASE_API_KEY and (not METABASE_USER_EMAIL or not METABASE_PASSWORD)
-):
-    raise ValueError(
-        "METABASE_URL is required, and either METABASE_API_KEY or both METABASE_USER_EMAIL and METABASE_PASSWORD must be provided"
-    )
+if not METABASE_URL or not METABASE_API_KEY:
+    raise ValueError("METABASE_URL and METABASE_API_KEY are required")
 
 
-# Authentication method enum
-class AuthMethod(Enum):
-    SESSION = "session"
-    API_KEY = "api_key"
+@asynccontextmanager
+async def lifespan(mcp_instance):
+    """Handle FastMCP lifespan events"""
+    logger.info("FastMCP server starting up")
+    yield
+    logger.info("FastMCP server shutting down")
+    # No cleanup needed since we use per-request HTTP clients
 
 
 # Initialize FastMCP server
-mcp = FastMCP(name="metabase-mcp")
+mcp = FastMCP(name="metabase-mcp", lifespan=lifespan)
 
 
 class MetabaseClient:
@@ -54,71 +48,33 @@ class MetabaseClient:
 
     def __init__(self):
         self.base_url = METABASE_URL.rstrip("/")
-        self.session_token: str | None = None
-        self.api_key: str | None = METABASE_API_KEY
-        self.auth_method = AuthMethod.API_KEY if METABASE_API_KEY else AuthMethod.SESSION
-        self.client = httpx.AsyncClient(timeout=30.0)
+        self.api_key = METABASE_API_KEY
+        logger.info("Using API key authentication")
 
-        logger.info(f"Using {self.auth_method.value} authentication method")
-
-    async def _get_headers(self) -> dict[str, str]:
-        """Get appropriate authentication headers"""
-        headers = {"Content-Type": "application/json"}
-
-        if self.auth_method == AuthMethod.API_KEY and self.api_key:
-            headers["X-API-KEY"] = self.api_key
-        elif self.auth_method == AuthMethod.SESSION:
-            if not self.session_token:
-                await self._get_session_token()
-            if self.session_token:
-                headers["X-Metabase-Session"] = self.session_token
-
-        return headers
-
-    async def _get_session_token(self) -> str:
-        """Get Metabase session token for email/password authentication"""
-        if self.auth_method == AuthMethod.API_KEY and self.api_key:
-            return self.api_key
-
-        if not METABASE_USER_EMAIL or not METABASE_PASSWORD:
-            raise ValueError("Email and password required for session authentication")
-
-        login_data = {"username": METABASE_USER_EMAIL, "password": METABASE_PASSWORD}
-
-        response = await self.client.post(f"{self.base_url}/api/session", json=login_data)
-
-        if response.status_code != 200:
-            error_data = response.json() if response.content else {}
-            raise Exception(f"Authentication failed: {response.status_code} - {error_data}")
-
-        session_data = response.json()
-        self.session_token = session_data.get("id")
-        logger.info("Successfully obtained session token")
-        return self.session_token
+    def _get_headers(self) -> dict[str, str]:
+        """Get authentication headers"""
+        return {"Content-Type": "application/json", "X-API-KEY": self.api_key}
 
     async def request(self, method: str, path: str, **kwargs) -> dict[str, Any]:
         """Make authenticated request to Metabase API"""
         url = f"{self.base_url}/api{path}"
-        headers = await self._get_headers()
+        headers = self._get_headers()
 
         logger.debug(f"Making {method} request to {path}")
 
-        response = await self.client.request(method=method, url=url, headers=headers, **kwargs)
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.request(method=method, url=url, headers=headers, **kwargs)
 
-        if not response.is_success:
-            error_data = response.json() if response.content else {}
-            error_message = (
-                f"API request failed with status {response.status_code}: {response.text}"
-            )
-            logger.warning(f"{error_message} - {error_data}")
-            raise Exception(error_message)
+            if not response.is_success:
+                error_data = response.json() if response.content else {}
+                error_message = (
+                    f"API request failed with status {response.status_code}: {response.text}"
+                )
+                logger.warning(f"{error_message} - {error_data}")
+                raise Exception(error_message)
 
-        logger.debug(f"Successful response from {path}")
-        return response.json()
-
-    async def close(self):
-        """Close the HTTP client"""
-        await self.client.aclose()
+            logger.debug(f"Successful response from {path}")
+            return response.json()
 
 
 # Global client instance
@@ -605,12 +561,6 @@ async def get_table_fields(table_id: int, limit: int = 20) -> dict[str, Any]:
         raise
 
 
-# Cleanup handler
-async def cleanup():
-    """Clean up resources on shutdown"""
-    await metabase_client.close()
-
-
 def main():
     """Main entry point for the server"""
     try:
@@ -643,8 +593,6 @@ def main():
     except Exception as e:
         logger.error(f"Server error: {e}")
         raise
-    finally:
-        asyncio.run(cleanup())
 
 
 if __name__ == "__main__":
