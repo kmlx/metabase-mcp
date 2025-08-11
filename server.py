@@ -46,7 +46,7 @@ class AuthMethod(Enum):
 
 
 # Initialize FastMCP server
-mcp = FastMCP(name="metabase-mcp")
+mcp = FastMCP(name="metabase-mcp", stateless_http=True)
 
 
 class MetabaseClient:
