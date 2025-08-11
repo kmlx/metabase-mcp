@@ -277,6 +277,66 @@ async def search_cards_in_collections(
 
 
 @mcp.tool
+async def search_metabase(
+    query: str,
+    limit: int = 20,
+    models: list[str] | None = None,
+    archived: bool = False,
+    search_native_query: bool | None = None
+) -> dict[str, Any]:
+    """
+    Search for items in Metabase using the search API.
+    
+    Args:
+        query: Search term to find in item names and descriptions
+        limit: Maximum number of results to return (default: 20)
+        models: List of item types to filter by (e.g., ["card", "dashboard", "collection"])
+        archived: Include archived items in results (default: False)
+        search_native_query: Search within native SQL queries (default: None)
+    """
+    try:
+        # Build base query parameters
+        params = {
+            "q": query,
+            "limit": limit,
+            "archived": str(archived).lower()
+        }
+
+        # Add optional parameters
+        if search_native_query is True:
+            params["search_native_query"] = "true"
+
+        # Build query string to handle multiple models parameters
+        from urllib.parse import urlencode
+        if models is not None:
+            params["models"] = models
+        query_string = urlencode(params, doseq=True)
+        result = await metabase_client.request("GET", f"/search?{query_string}")
+
+        # Add search metadata to response
+        search_info = {
+            "query": query,
+            "limit": limit,
+            "models": models,
+            "total_results": len(result.get("data", []) if isinstance(result, dict) else result),
+        }
+
+        if isinstance(result, dict):
+            result["search_info"] = search_info
+        else:
+            result = {
+                "data": result,
+                "search_info": search_info
+            }
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Error searching Metabase: {e}")
+        raise
+
+
+@mcp.tool
 async def list_databases() -> dict[str, Any]:
     """List all databases in Metabase"""
     try:

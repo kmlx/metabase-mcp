@@ -140,6 +140,7 @@ To integrate with Claude, add or update the configuration file at `~/Library/App
 - `create_collection`: Create a new collection in Metabase
 
 ### Smart Search Tools
+- `search_metabase`: Universal search using Metabase search API (cards, dashboards, collections)
 - `find_candidate_collections`: Find collections by name/description matching (fast)
 - `search_cards_in_collections`: Search for cards within specific collections (targeted)
 
