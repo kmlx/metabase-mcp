@@ -46,7 +46,7 @@ class AuthMethod(Enum):
 
 
 # Initialize FastMCP server
-mcp = FastMCP(name="metabase-mcp", stateless_http=True)
+mcp = FastMCP(name="metabase-mcp")
 
 
 class MetabaseClient:
@@ -634,9 +634,9 @@ def main():
 
         if transport in ["sse", "streamable-http"]:
             logger.info(f"Server will be available at http://{host}:{port}")
-            mcp.run(transport=transport, host=host, port=port)
+            mcp.run(transport=transport, host=host, port=port, stateless_http=True)
         else:
-            mcp.run(transport=transport)
+            mcp.run(transport=transport, stateless_http=True)
 
     except KeyboardInterrupt:
         logger.info("Server shutdown requested")
