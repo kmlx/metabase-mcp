@@ -1,15 +1,12 @@
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
 [project]
-name = "metabase-fastmcp"
+name = "metabase-mcp"
 version = "0.1.0"
-description = "A FastMCP server for Metabase integration"
+description = "A modern FastMCP server for Metabase integration with type-safe configuration"
 readme = "README.md"
 requires-python = ">=3.12"
 license = {text = "MIT"}
 authors = [
+    {name = "Adrian Stanescu", email = "prism.sails_6@icloud.com"},
     {name = "Hugo Lau", email = "hugolau23@example.com"},
 ]
 keywords = ["metabase", "mcp", "model-context-protocol", "ai", "claude", "cursor"]
@@ -22,10 +19,11 @@ classifiers = [
 ]
 
 dependencies = [
-    "fastmcp>=2.11.2",
-    "python-dotenv>=1.1.1",
+    "mcp>=1.12.4",
     "httpx>=0.28.1",
-    "pydantic>=2.11.7",
+    "pydantic-settings>=2.10.1",
+    "starlette>=0.46.2",
+    "sse-starlette==2.4.1",
 ]
 
 [dependency-groups]
@@ -38,16 +36,10 @@ dev = [
     "ruff>=0.8.0",
 ]
 
-[project.scripts]
-metabase-mcp = "server:main"
-
 [project.urls]
-Homepage = "https://github.com/hyeongjun-dev/metabase-mcp"
-Repository = "https://github.com/hyeongjun-dev/metabase-mcp"
-Issues = "https://github.com/hyeongjun-dev/metabase-mcp/issues"
-
-[tool.hatch.build.targets.wheel]
-packages = ["."]
+Homepage = "https://github.com/kmlx/metabase-mcp"
+Repository = "https://github.com/kmlx/metabase-mcp"
+Issues = "https://github.com/kmlx/metabase-mcp/issues"
 
 [tool.black]
 line-length = 100
@@ -73,4 +65,4 @@ ignore = ["E501"]
 
 [tool.ruff.format]
 quote-style = "double"
-indent-style = "space" 
+indent-style = "space"

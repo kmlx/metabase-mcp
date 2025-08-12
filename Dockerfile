@@ -1,35 +1,33 @@
-FROM python:3.12-slim
+FROM ghcr.io/astral-sh/uv:0.8-python3.12-bookworm-slim
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# Create non-root user
+RUN groupadd -r appuser && useradd -r -g appuser appuser
 
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies and uv
-RUN apt-get update && apt-get install -y \
-    gcc \
-    curl \
-    && curl -LsSf https://astral.sh/uv/install.sh | sh \
-    && rm -rf /var/lib/apt/lists/*
+# Copy workspace files for dependency resolution
+COPY pyproject.toml uv.lock ./
 
-# Add uv to PATH
-ENV PATH="/root/.local/bin:$PATH"
-
-# Copy project files
-COPY pyproject.toml .
-COPY requirements.txt .
-
-# Install Python dependencies with uv
-RUN uv sync --frozen
+# Install dependencies
+RUN uv sync --locked
 
 # Copy application code
-COPY server.py .
-COPY .env* ./
+COPY src/ src/
 
-# Create non-root user
-RUN useradd --create-home --shell /bin/bash app
-USER app
+# Create cache directory and change ownership
+RUN mkdir -p /home/appuser/.cache/uv && \
+    chown -R appuser:appuser /app /home/appuser/.cache
 
-# Expose port (for HTTP/SSE transport)
-EXPOSE 8000
+# Switch to non-root user
+USER appuser
 
-# Default command
-CMD ["uv", "run", "python", "server.py"] 
+# Expose port (updated to match our config default)
+EXPOSE 8080
+
+# Run the application using our new package structure
+CMD ["uv", "run", "python", "-m", "src"]

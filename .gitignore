@@ -1,15 +1,23 @@
-.env
-
-tests/
-
-examples/
-
-.venv/
-
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.pytest_cache
+.mypy_cache/
 .ruff_cache/
 
-.pytest_cache/
+# Virtual environments
+.venv
 
-__pycache__/
+# macos
+.DS_Store
 
-.gitignore
+# Environment
+.env*
+!.env.example
+
+# LLM
+.claude
